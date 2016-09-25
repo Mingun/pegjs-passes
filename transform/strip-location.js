@@ -1,6 +1,6 @@
 'use strict';
 
-var visitor = require("pegjs/lib/compiler/visitor");
+let visitor = require('pegjs/lib/compiler/visitor');
 
 function stripLocation(ast) {
   function stripLeaf(node) {
@@ -24,7 +24,10 @@ function stripLocation(ast) {
     return function(node) {
       delete node.location;
 
-      node[property].forEach(strip);
+      let child = node[property];
+      if (child) {
+        child.forEach(strip);
+      }
     };
   }
 
@@ -48,14 +51,14 @@ function stripLocation(ast) {
       }
     },
 
-    "import":     stripLeaf,
+    'import':     stripLeaf,
     initializer:  stripChildren('annotations'),
     annotation:   stripLeaf,
     rule:         stripAnnotations,
     named:        stripExpression,
-    choice:       stripChildren("alternatives"),
+    choice:       stripChildren('alternatives'),
     action:       stripAnnotations,
-    sequence:     stripChildren("elements"),
+    sequence:     stripChildren('elements'),
     labeled:      stripExpression,
     text:         stripExpression,
     simple_and:   stripExpression,
@@ -74,11 +77,12 @@ function stripLocation(ast) {
       }
       stripExpression(node);
     },
+    group:        stripExpression,
     semantic_and: stripChildren('annotations'),
     semantic_not: stripChildren('annotations'),
     rule_ref:     stripLeaf,
     literal:      stripLeaf,
-    "class":      stripLeaf,
+    'class':      stripLeaf,
     any:          stripLeaf
   });
 
@@ -86,9 +90,7 @@ function stripLocation(ast) {
 }
 
 // Данный файл может сразу использоваться, как плагин
-module.exports = {
-  use: function(config) {
-    config.passes.transform.push(stripLocation);
-  },
-  pass: stripLocation
+stripLocation.use = function(config) {
+  config.passes.transform.push(stripLocation);
 };
+module.exports = stripLocation;
