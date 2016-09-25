@@ -1,8 +1,32 @@
 'use strict';
 
-var asts    = require('pegjs/lib/compiler/asts');
-var visitor = require('pegjs/lib/compiler/visitor');
+let asts    = require('pegjs/lib/compiler/asts');
+let visitor = require('pegjs/lib/compiler/visitor');
 
+/// Виды типов:
+/// Примитивные:
+/// - 'none': тип значений, возвращаемых из семантических предикатов, например, 'bool'.
+///   Данный тип должно быть возможно использовать в логических выражениях с двоичной логикой.
+/// - 'unit': тип одного элемента входной последовательности, например, 'char'.
+///   Данный тип имеют результаты разбора одиночного символа и класса символов.
+/// - 'range': тип входной последовательности, например, 'std::string'.
+///   Данный тип имеет результат разбора литерала и оператор взятия совпавшей части
+///   последовательности ($).
+/// Составные:
+/// - 'enum': тип, способный хранить в себе один из дочерних типов, например, 'boost::variant'.
+///   Является результатом обработки узлов выбора альтернативы.
+/// - 'list': тип для представления списка элементов дочернего типа, например, 'std::vector'.
+///   Является результатом обработки узлов повторений элементов (*, +, range)
+/// - 'tuple': тип, хранящий в себе все дочерные типы в указанном порядке, например, 'std::tuple'.
+///   Данный тип генерирует только узел последовательности элементов.
+/// - 'option': тип, хранящий в себе дочерний тип или признак того, что разбор оказался неуспешен.
+///   Данный тип генерирует только узел опционального элемента.
+/// - 'ref': тип, описывающий ссылку на свой дочерный тип, например '&'.
+///   Данный тип генерирует только узел ссылки на правило.
+/// Фантомные:
+/// - 'rule': тип, изначально приписываемый какому-то правилу, для возможности вычисления цикличеких
+///   ссылок.
+/// - 'error': тип, приписываемый узлам действия в случае, если у них не задан собственный тип.
 function Type(kind, name, value) {
   this.kind  = kind;
   this.name  = name;
@@ -13,7 +37,7 @@ function buildVisitor(functions) {
     if (!type.kind) {
       throw new Error('Invalid `type`: has no property `kind`');
     }
-    var f = functions[type.kind];
+    let f = functions[type.kind];
     if (!f) {
       throw new Error('No visitor function for type `' + type.kind + '`', type);
     }
@@ -22,9 +46,9 @@ function buildVisitor(functions) {
   return visit;
 };
 
-var noneType  = new Type('none');
-var unitType  = new Type('unit');
-var rangeType = new Type('range');
+const noneType  = new Type('none');
+const unitType  = new Type('unit');
+const rangeType = new Type('range');
 
 function none(node)  { return node.result.type = noneType; }
 function unit(node)  { return node.result.type = unitType; }
@@ -33,9 +57,9 @@ function range(node) { return node.result.type = rangeType; }
 /// Выводит типы всех узлов грамматики на основе типов action-узлов.
 /// Типы action узлов должны быть предварительно размечены, например, проходом init-types.
 function inferenceTypes(ast, options) {
-  var emitError = options.collector.emitError;
+  let emitError = options.collector.emitError;
 
-  var i = 0;
+  let i = 0;
   /// Генератор уникальных имен для типов.
   function gen() {
     ++i;
@@ -52,12 +76,12 @@ function inferenceTypes(ast, options) {
   // структуру которого еще предстоит выяснить.
   ast.rules.forEach(rule => rule.result.type = new Type('rule', rule.name));
 
-  // Список узлов, посещенных до входа в узел `rule_ref`. Помогает нахотить рекурсивные типы.
-  var visitedNodes = [];
+  // Список узлов, посещенных до входа в узел `rule_ref`. Помогает находить рекурсивные типы.
+  let visitedNodes = [];
   var inference = visitor.build({
     rule:         function(node) {
       visitedNodes.push(node);
-      var type = inference(node.expression);
+      let type = inference(node.expression);
       visitedNodes.pop();
       // На `node.result.type` ссылается множество `rule_ref` узлов. При этом, точный тип данного
       // узла может стать известным позже, чем данные ссылки будут установлены. Чтобы не заменять
@@ -72,27 +96,28 @@ function inferenceTypes(ast, options) {
     },
     action:       function(node) {
       inference(node.expression);
-      var type = node.result.type;
-      if (type) {
-        // Действию извне должны были задать либо конечный тип, либо функцию вывода типа
-        // из типа меток, доступных действию.
-        if (type instanceof Type) {
-          return node.result.type;
-        } else
-        if (typeof(type) === 'function') {
-          // Возвращаемый тип действия может зависеть от типов помеченных выражений.
-          // Наиболее частый случай этого - возврат лишь одного элемента из последовательности.
-          type = type();
-          if (type instanceof Type) {
-            return node.result.type = type;
-          }
-          emitError("Type generator for action must return instance of 'Type', but returned object has type "+typeof(type), node.location);
-        } else {
-          emitError("Action result type must be 'Type' instance or function, but it type is "+typeof(type), node.location);
-        }
-      } else {
+      let type = node.result.type;
+      if (!type) {
         emitError('Action result type not defined', node.location);
+        return node.result.type = new Type('error', gen());
       }
+      // Действию извне должны были задать либо конечный тип, либо функцию вывода типа
+      // из типа меток, доступных действию.
+      if (type instanceof Type) {
+        return type;
+      }
+      if (typeof(type) !== 'function') {
+        emitError("Action result type must be 'Type' instance or function, but it type is "+typeof(type), node.location);
+        return node.result.type = new Type('error', gen());
+      }
+      // Возвращаемый тип действия может зависеть от типов помеченных выражений.
+      // Наиболее частый случай этого - возврат лишь одного элемента из последовательности.
+      type = type();
+      if (type instanceof Type) {
+        return node.result.type = type;
+      }
+      emitError("Type generator for action must return instance of 'Type', but returned object has type "+typeof(type), node.location);
+      return node.result.type = new Type('error', gen());
     },
     sequence:     function(node) {
       return node.result.type = new Type('tuple', gen(), node.elements.map(inference));
@@ -106,7 +131,13 @@ function inferenceTypes(ast, options) {
     },
     zero_or_more: list,
     one_or_more:  list,
-    range:        list,
+    range:        function(node) {
+      if (node.delimiter) {
+        inference(node.delimiter);
+      }
+      return list(node);
+    },
+    group:        delegate,
     semantic_and: none,
     semantic_not: none,
     rule_ref:     function(node) {
@@ -117,7 +148,7 @@ function inferenceTypes(ast, options) {
       return node.result.type = isRecursive ? new Type('ref', gen(), rule.result.type) : rule.result.type;
     },
     literal:      range,
-    "class":      unit,
+    'class':      unit,
     any:          unit,
   });
 
