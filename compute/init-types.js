@@ -1,22 +1,22 @@
 'use strict';
 
-var Type    = require('./inference-types').Type;
-var asts    = require('pegjs/lib/compiler/asts');
-var visitor = require('pegjs/lib/compiler/visitor');
+let Type    = require('./inference-types').Type;
+let asts    = require('pegjs/lib/compiler/asts');
+let visitor = require('pegjs/lib/compiler/visitor');
 
 /// Задает типы всем узлам действий грамматики, помеченных аннотациями @Return или @Type,
 /// либо задает тип результата по умолчанию, если таковой есть.
 function initTypes(ast, options) {
-  var emitError = options.collector.emitError;
-  var emitInfo  = options.collector.emitInfo;
-  var defType   = options.defaultType;
+  let emitError = options.collector.emitError;
+  let emitInfo  = options.collector.emitInfo;
+  let defType   = options.defaultType;
 
-  var init = visitor.build({
+  let init = visitor.build({
     action: function(node) {
       init(node.expression);
 
-      var r = asts.findAnnotation(node, 'Return');
-      var t = asts.findAnnotation(node, 'Type');
+      let r = asts.findAnnotation(node, 'Return');
+      let t = asts.findAnnotation(node, 'Type');
 
       if (r && t) {
         emitError("Action can't have both annotations @Return and @Type at the same time; use one of them", node.location);
@@ -30,7 +30,7 @@ function initTypes(ast, options) {
       }
 
       if (t) {
-        var n = node.labels[t.value];
+        let n = node.labels[t.value];
         if (!n) {
           emitError("Label '" + t.value + "' not visible from this action", node.location);
         }
@@ -52,9 +52,7 @@ function initTypes(ast, options) {
 }
 
 // Данный файл может сразу использоваться, как плагин
-module.exports = {
-  use: function(config) {
-    config.passes.transform.push(initTypes);
-  },
-  pass: initTypes
+initTypes.use = function(config) {
+  config.passes.transform.push(initTypes);
 };
+module.exports = initTypes;
