@@ -32,19 +32,6 @@ function Type(kind, name, value) {
   this.name  = name;
   this.value = value;
 }
-function buildVisitor(functions) {
-  function visit(type) {
-    if (!type.kind) {
-      throw new Error('Invalid `type`: has no property `kind`');
-    }
-    let f = functions[type.kind];
-    if (!f) {
-      throw new Error('No visitor function for type `' + type.kind + '`', type);
-    }
-    return f.apply(null, arguments);
-  }
-  return visit;
-};
 
 const noneType  = new Type('none');
 const unitType  = new Type('unit');
@@ -141,8 +128,8 @@ function inferenceTypes(ast, options) {
     semantic_and: none,
     semantic_not: none,
     rule_ref:     function(node) {
-      var rule = asts.findRule(ast, node.name);
-      var isRecursive = visitedNodes.indexOf(rule) >= 0;
+      let rule = asts.findRule(ast, node.name);
+      let isRecursive = visitedNodes.indexOf(rule) >= 0;
       // У всех правил есть хоть какой-то тип, возможно, еще не вычисленный. Тем не менее, ссылаться
       // на него можно. В случае рекурсивного типа ссылаемся на него через вспомогательный тип ref.
       return node.result.type = isRecursive ? new Type('ref', gen(), rule.result.type) : rule.result.type;
@@ -156,12 +143,8 @@ function inferenceTypes(ast, options) {
 }
 
 // Данный файл может сразу использоваться, как плагин
-module.exports = {
-  Type: Type,
-  buildVisitor: buildVisitor,
-
-  use: function(config) {
-    config.passes.transform.push(inferenceTypes);
-  },
-  pass: inferenceTypes,
+inferenceTypes.Result = Type;
+inferenceTypes.use = function(config) {
+  config.passes.transform.push(inferenceTypes);
 };
+module.exports = inferenceTypes;

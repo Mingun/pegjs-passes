@@ -1,6 +1,6 @@
 'use strict';
 
-let Type    = require('./inference-types').Type;
+let Type    = require('./inference-types').Result;
 let asts    = require('pegjs/lib/compiler/asts');
 let visitor = require('pegjs/lib/compiler/visitor');
 
