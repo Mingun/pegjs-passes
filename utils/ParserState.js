@@ -1,5 +1,76 @@
 'use strict';
 
+/// Буфер, хранящий данные порциями и могущий не хранить устаревшие порции для экономии
+/// памяти.
+class Buf {
+  constructor(chunk) {
+    // Набор порций с реальными данными. Порции покрывают все виртуальное пространство
+    // буфера без пропусков и наложений
+    this.chunks = chunk ? [chunk] : [];
+    // Пары смещений для каждой порции, содержащие начальное и конечное смещение в буфере,
+    // которые покарывает даннаяпорция. Т.к. порции идут впритык, но конец одной является
+    // началом другой, поэтому хранятся только концы каждой порции плюс начало самой первой
+    // порции
+    this.bounds = chunk ? [0, chunk.length] : [0];
+    // Общее количество данных в буфере
+    this.length = chunk ? chunk.length : 0;
+  }
+  /// Добавляет в буфер новую порцию данных.
+  push(chunk) {
+    if (chunk.length === 0) { return }
+
+    this.length += chunk.length;
+    this.bounds.push(this.length);
+    this.chunks.push(chunk);
+  }
+  /// Выкидывает из буфера все порции, хранящие данные ранее указанного смещения
+  strip(offset) {
+    let i = this.findIndex(offset);
+    this.bounds.splice(0, i);
+    this.chunks.splice(0, i);
+  }
+  charAt(offset) {
+    let i = this.findIndex(offset);
+    let j = offset - this.bounds[i];
+    return this.chunks[i].charAt(j);
+  }
+  substr(offset, length) {
+    let s = this.findIndex(offset);
+    let j = offset - this.bounds[s];
+
+    // Запрошенные данные находятся внутри одной порции
+    let chunk = this.chunks[s];
+    if (j + length <= chunk.length) {
+      return chunk.substr(j, length);
+    }
+
+    // Запрошенные данные внутри нескольких порций
+    let r = [chunk.substr(j)];
+    length -= chunk.length - j;
+    for (let i = s + 1; i <= this.chunks.length; ++i) {
+      let chunk = this.chunks[i];
+      if (chunk.length < length) {
+        r.push(chunk);
+        length -= chunk.length;
+      } else {
+        r.push(chunk.substr(0, length));
+        break;
+      }
+    }
+    return r.join('');
+  }
+  findIndex(offset) {
+    let i = this.bounds.findIndex(o => o > offset);
+    if (i === 0) {
+      throw new Error('Chunk for offset ' + offset + ' already dropped, only available chunks from ' + this.bounds[0] + ' offset');
+    }
+    if (i < 0) {
+      throw new Error('Chunk for offset ' + offset + ' not yet retrivied');
+    }
+    return i-1;
+  }
+}
+
 /// @param parser Генератор, аккумулирующий блоки и возвращаающий результат разбора,
 ///        как только у него будет достаточно блоков для этого. Свойство `value`
 ///        возвращаемого объекта содержит либо результат разбора, в случае, если разбор
