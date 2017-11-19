@@ -2,17 +2,20 @@
 
 function buildVisitor(property, functions) {
   function visit(obj) {
+    if (!(property in obj)) {
+      throw new TypeError('Visited object has no property `' + property + '`', obj);
+    }
     let kind = obj[property];
-    if (!kind) {
-      throw new Error('Invalid `object`: has no property `' + property + '`');
+    let func = functions[kind];
+    if (!func) {
+      throw new TypeError('No visitor function for type `' + kind + '`', obj);
     }
-    let f = functions[kind];
-    if (!f) {
-      throw new Error('No visitor function for type `' + kind + '`', obj);
+    if (typeof(func) !== 'function') {
+      throw new TypeError("Property `" + kind + "` is not a function: " + func);
     }
-    return f.apply(null, arguments);
+    return func.apply(null, arguments);
   }
   return visit;
 };
 
-module.export = buildVisitor
+module.exports = buildVisitor;
